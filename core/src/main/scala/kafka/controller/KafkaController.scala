@@ -211,8 +211,14 @@ class KafkaController(val config : KafkaConfig, zkClient: ZkClient, val brokerSt
 
   def epoch = controllerContext.epoch
 
-  def clientId = {
-    val listeners = config.listeners
+  def cclientId = {
+    val listeners = config.clisteners
+    val controllerListener = listeners.get(config.interBrokerSecurityProtocol)
+    "id_%d-host_%s-port_%d".format(config.brokerId, controllerListener.get.host, controllerListener.get.port)
+  }
+
+  def pclientId = {
+    val listeners = config.plisteners
     val controllerListener = listeners.get(config.interBrokerSecurityProtocol)
     "id_%d-host_%s-port_%d".format(config.brokerId, controllerListener.get.host, controllerListener.get.port)
   }

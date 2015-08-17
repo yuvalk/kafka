@@ -50,7 +50,9 @@ object Defaults {
   val QueuedMaxRequests = 500
 
   /** ********* Socket Server Configuration ***********/
-  val Port = 9092
+  //val Port = 9092
+  val CPort = 9093
+  val PPort = 9094
   val HostName: String = new String("")
   val SocketSendBufferBytes: Int = 100 * 1024
   val SocketReceiveBufferBytes: Int = 100 * 1024
@@ -173,9 +175,11 @@ object KafkaConfig {
   val BackgroundThreadsProp = "background.threads"
   val QueuedMaxRequestsProp = "queued.max.requests"
   /** ********* Socket Server Configuration ***********/
-  val PortProp = "port"
+  val CPortProp = "consumer_port"
+  val PPortProp = "producer_port"
   val HostNameProp = "host.name"
-  val ListenersProp = "listeners"
+  val CListenersProp = "consumer_listeners"
+  val PListenersProp = "producer_listeners"
   val AdvertisedHostNameProp: String = "advertised.host.name"
   val AdvertisedPortProp = "advertised.port"
   val AdvertisedListenersProp = "advertised.listeners"
@@ -295,7 +299,8 @@ object KafkaConfig {
   val BackgroundThreadsDoc = "The number of threads to use for various background processing tasks"
   val QueuedMaxRequestsDoc = "The number of queued requests allowed before blocking the network threads"
   /** ********* Socket Server Configuration ***********/
-  val PortDoc = "the port to listen and accept connections on"
+  val CPortDoc = "the port to listen and accept connections on for the consumer"
+  val PPortDoc = "the port to listen and accept connections on for the proucer"
   val HostNameDoc = "hostname of broker. If this is set, it will only bind to this address. If this is not set, it will bind to all interfaces"
   val ListenersDoc = "Listener List - Comma-separated list of URIs we will listen on and their protocols.\n" +
           " Specify hostname as 0.0.0.0 to bind to all interfaces.\n" +
@@ -452,9 +457,11 @@ object KafkaConfig {
       .define(QueuedMaxRequestsProp, INT, Defaults.QueuedMaxRequests, atLeast(1), HIGH, QueuedMaxRequestsDoc)
 
       /** ********* Socket Server Configuration ***********/
-      .define(PortProp, INT, Defaults.Port, HIGH, PortDoc)
+      .define(CPortProp, INT, Defaults.CPort, HIGH, CPortDoc)
+      .define(PPortProp, INT, Defaults.PPort, HIGH, PPortDoc)
       .define(HostNameProp, STRING, Defaults.HostName, HIGH, HostNameDoc)
-      .define(ListenersProp, STRING, HIGH, ListenersDoc, false)
+      .define(CListenersProp, STRING, HIGH, ListenersDoc, false)
+      .define(PListenersProp, STRING, HIGH, ListenersDoc, false)
       .define(AdvertisedHostNameProp, STRING, HIGH, AdvertisedHostNameDoc, false)
       .define(AdvertisedPortProp, INT, HIGH, AdvertisedPortDoc, false)
       .define(AdvertisedListenersProp, STRING, HIGH, AdvertisedListenersDoc, false)
@@ -610,9 +617,10 @@ case class KafkaConfig (props: java.util.Map[_, _]) extends AbstractConfig(Kafka
 
   /** ********* Socket Server Configuration ***********/
   val hostName = getString(KafkaConfig.HostNameProp)
-  val port = getInt(KafkaConfig.PortProp)
+  val cport = getInt(KafkaConfig.CPortProp)
+  val pport = getInt(KafkaConfig.PPortProp)
   val advertisedHostName = Option(getString(KafkaConfig.AdvertisedHostNameProp)).getOrElse(hostName)
-  val advertisedPort: java.lang.Integer = Option(getInt(KafkaConfig.AdvertisedPortProp)).getOrElse(port)
+  val advertisedPort: java.lang.Integer = Option(getInt(KafkaConfig.AdvertisedPortProp)).getOrElse(cport) //TODO: fix whole advertise issue
 
   val socketSendBufferBytes = getInt(KafkaConfig.SocketSendBufferBytesProp)
   val socketReceiveBufferBytes = getInt(KafkaConfig.SocketReceiveBufferBytesProp)
@@ -711,7 +719,8 @@ case class KafkaConfig (props: java.util.Map[_, _]) extends AbstractConfig(Kafka
   val deleteTopicEnable = getBoolean(KafkaConfig.DeleteTopicEnableProp)
   val compressionType = getString(KafkaConfig.CompressionTypeProp)
 
-  val listeners = getListeners
+  val clisteners = getCListeners
+  val plisteners = getPListeners
   val advertisedListeners = getAdvertisedListeners
   val logRetentionTimeMillis = getLogRetentionTimeMillis
 
@@ -755,12 +764,23 @@ case class KafkaConfig (props: java.util.Map[_, _]) extends AbstractConfig(Kafka
 
   // If the user did not define listeners but did define host or port, let's use them in backward compatible way
   // If none of those are defined, we default to PLAINTEXT://:9092
-  private def getListeners(): immutable.Map[SecurityProtocol, EndPoint] = {
-    if (getString(KafkaConfig.ListenersProp) != null) {
-      validateUniquePortAndProtocol(getString(KafkaConfig.ListenersProp))
-      CoreUtils.listenerListToEndPoints(getString(KafkaConfig.ListenersProp))
+  private def getCListeners(): immutable.Map[SecurityProtocol, EndPoint] = {
+    if (getString(KafkaConfig.CListenersProp) != null) {
+      validateUniquePortAndProtocol(getString(KafkaConfig.CListenersProp))
+      CoreUtils.listenerListToEndPoints(getString(KafkaConfig.CListenersProp))
     } else {
-      CoreUtils.listenerListToEndPoints("PLAINTEXT://" + hostName + ":" + port)
+      CoreUtils.listenerListToEndPoints("PLAINTEXT://" + hostName + ":" + cport)
+    }
+  }
+
+  // If the user did not define listeners but did define host or port, let's use them in backward compatible way
+  // If none of those are defined, we default to PLAINTEXT://:9092
+  private def getPListeners(): immutable.Map[SecurityProtocol, EndPoint] = {
+    if (getString(KafkaConfig.PListenersProp) != null) {
+      validateUniquePortAndProtocol(getString(KafkaConfig.PListenersProp))
+      CoreUtils.listenerListToEndPoints(getString(KafkaConfig.PListenersProp))
+    } else {
+      CoreUtils.listenerListToEndPoints("PLAINTEXT://" + hostName + ":" + pport)
     }
   }
 
@@ -774,7 +794,7 @@ case class KafkaConfig (props: java.util.Map[_, _]) extends AbstractConfig(Kafka
     } else if (getString(KafkaConfig.AdvertisedHostNameProp) != null || getInt(KafkaConfig.AdvertisedPortProp) != null) {
       CoreUtils.listenerListToEndPoints("PLAINTEXT://" + advertisedHostName + ":" + advertisedPort)
     } else {
-      getListeners()
+      getCListeners()
     }
   }
 

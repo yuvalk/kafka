@@ -136,8 +136,8 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime) extends Logg
         config.brokerId =  getBrokerId
         this.logIdent = "[Kafka Server " + config.brokerId + "], "
 
-        socketServer = new SocketServer(config.brokerId,
-                                        config.listeners,
+        csocketServer = new SocketServer(config.brokerId,
+                                        config.clisteners,
                                         config.numNetworkThreads,
                                         config.queuedMaxRequests,
                                         config.socketSendBufferBytes,
@@ -148,7 +148,22 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime) extends Logg
                                         config.maxConnectionsPerIpOverrides,
                                         kafkaMetricsTime,
                                         metrics)
-          socketServer.startup()
+
+        psocketServer = new SocketServer(config.brokerId,
+                                        config.plisteners,
+                                        config.numNetworkThreads,
+                                        config.queuedMaxRequests,
+                                        config.socketSendBufferBytes,
+                                        config.socketReceiveBufferBytes,
+                                        config.socketRequestMaxBytes,
+                                        config.maxConnectionsPerIp,
+                                        config.connectionsMaxIdleMs,
+                                        config.maxConnectionsPerIpOverrides,
+                                        kafkaMetricsTime,
+                                        metrics)
+
+          csocketServer.startup()
+          psocketServer.startup()
 
           /* start replica manager */
           replicaManager = new ReplicaManager(config, time, zkClient, kafkaScheduler, logManager, isShuttingDown)
